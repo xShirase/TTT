@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+    
+    <head>
+        <meta charset="utf-8" />
+        <title>Toolbox</title>
+        <link href="/style.css" rel="stylesheet" type="text/css" />
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+        <script type="text/javascript" src="/socket.io/socket.io.js"></script>
+    </head>
+    
+    <body>
+        <header>
+            <div class="container">
+                <div class="logo">
+                    <a href="/">
+                        <img alt="I'm not so good with Photoshop..." height="95" src="/images/logo.png" width="108" />
+                    </a>
+                </div>
+                <nav>
+                    <ul class="menu">
+                        <li> <a href="/Home" class="home">Home</a> 
+                        </li>
+                        <li> <a href="/Whatitsabout.html" class="what-its-about">What it's about</a> 
+                        </li>
+                        <li> <a href="/Coding" class="coding">Coding</a> 
+                        </li>
+                        <li> <a href="/Toolbox" class="toolbox">Toolbox</a> 
+                        </li>
+                        <li> <a href="/Money" class="money">Money</a> 
+                        </li>
+                        <li> <a href="/About.html" class="about-me">About Me</a> 
+                        </li>
+                        <li> <a href="/Contact.html" class="contact-us">Contact</a> 
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </header>
+        <div id="main">
+            <div class="container">
+                <div id="block_ttt" class="block">
+                    <div class="block_inside">
+                        <div id="tttcont">
+                            <canvas id="board" width="600" height="600" onclick="move()"></canvas>
+                            <div id='formttt' class="visible">
+                                <h1>Play</h1>
+                                <div class="fieldContainer">
+                                    <div class="formRow">
+                                        <div class="label">
+                                            <label for="name">Name:</label>
+                                        </div>
+                                        <div class="field">
+                                            <input type="text" id="name" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="chatbox">
+                            <div id= "queue">
+
+                            </div>
+                            <div id = "chat">
+                                <div class="field">
+                                   <input type="text" id="chat" />
+                                </div>
+                            </div>
+                            <div id = "ingame">
+
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <footer>
+            <div class="container">
+                <div>
+                    <p>
+                        <a href="http://jigsaw.w3.org/css-validator/check/referer">
+                            <img style="border:0;width:88px;height:31px" src="http://jigsaw.w3.org/css-validator/images/vcss-blue" alt="CSS Valide !" />
+                        </a>
+                    </p>
+                </div>
+            </div>
+        </footer>
+        <script type="text/javascript">
+/*jslint browser:true */
+/* node JSLint: true */
+/*global alert: false, $: false*/
+var started = 0,
+    player = 0,
+    color = '',
+    soc = io.connect();
+//Sending Chat message
+$('#chat').keypress(function(event) {
+    "use strict";
+        if (event.which === 13) { //key enter pressed
+            event.preventDefault();           
+            soc.send('chat,' + $('#chat').val()); //send player message to socket
+        }
+    });
+
+
+//Game related functions
+
+function findPos(obj) {
+    "use strict";
+    var curleft = 0,
+        curtop = 0;
+    if (obj.offsetParent) {
+        while (obj.offsetParent) {
+            obj = obj.offsetParent;
+            curleft += obj.offsetLeft;
+            curtop += obj.offsetTop;
+        }
+        return {
+            x: curleft,
+            y: curtop
+        };
+    }
+    return undefined;
+}
+
+function move(event) {
+    "use strict";
+    if (started === 1) {
+        //alert(color + 'is you');
+        event = event || window.event;
+        var canvas = document.getElementById('board'),
+            pos = findPos(canvas),
+            //alert(pos.x+' '+pos.y);
+            x = event.pageX - pos.x,
+            y = event.pageY - pos.y;
+        soc.send('move,' + color + ',' + x + ',' + y);
+    }
+}
+
+function drawGrid(ctx) {
+    "use strict";
+    ctx.moveTo(200, 0);
+    ctx.lineTo(200, 600);
+    ctx.moveTo(400, 0);
+    ctx.lineTo(400, 600);
+    ctx.moveTo(0, 200);
+    ctx.lineTo(600, 200);
+    ctx.moveTo(0, 400);
+    ctx.lineTo(600, 400);
+    ctx.stroke();
+}
+
+//main
+
+$(function() {
+    "use strict";
+    var canvas = document.getElementById('board'),
+        ctx = canvas.getContext('2d');
+    drawGrid(ctx); 
+
+
+    //when user enters his name (could benefit with some err control, is there a possibility of script injection?)
+    $('#name').keypress(function(event) {
+        if (event.which === 13) { //key enter pressed
+            event.preventDefault();
+            
+            soc.send('player,' + $('#name').val()); //send player message to socket
+            document.getElementById('formttt').className = "hidden"; //hide the form with a neat fadeout ^^
+        }
+    });
+
+    soc.on('connect', function() {
+        //reading messages (parser works the exact same way than the server)
+        soc.on('message', function(message) {
+            var msg = message.split(","),
+                recx = parseInt(msg[2], null),
+                recy = parseInt(msg[3], null);
+
+            if (msg[0] === "player") {
+                alert('you are player' + msg[1] + ' : ' + 'Your color is :' + msg[3]);
+                color = msg[3];
+            } else if (msg[0] === "start") {
+                started = 1;
+            } else if (msg[0] === "move") {
+                ctx.moveTo(recx, recy);
+                if (msg[1] === "x") {
+                    //alert(recx+','+recy);
+                    ctx.moveTo(recx - 20, recy - 20);
+                    ctx.lineTo(recx + 20, recy + 20);
+                    ctx.moveTo(recx - 20, recy + 20);
+                    ctx.lineTo(recx + 20, recy - 20);
+                } else {
+                    ctx.arc(recx, recy, 30, 0, 2 * Math.PI);
+                }
+                ctx.stroke();
+            } else if (msg[0] === "error") {
+                alert(msg[1]);
+            } else if (msg[0] === "win") { //if the game is finished (either win, tie or forfeit), reset the board.
+                canvas.width = canvas.width;
+                //ctx.clearRect(0,0,canvas.width, canvas.height); NOT WORKING WHY? used width=width as workaround
+                drawGrid(ctx);
+                alert(msg[1]);
+            } else if (msg[0] === "alert") {
+                alert(msg[1]);
+            } else if (msg[0] === "chat") {
+                msg = '';
+            }
+        });
+    });
+
+});
+        </script>
+    </body>
+
+</html>

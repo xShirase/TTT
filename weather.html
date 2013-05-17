@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+    
+    <head>
+        <meta charset="utf-8" />
+        <title>Toolbox</title>
+        <link href="/style.css" rel="stylesheet" type="text/css" />
+        <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+        <script type="text/javascript" src="/socket.io/socket.io.js"></script>
+    </head>
+    
+    <body onload="initialize()">
+        <header>
+            <div class="container">
+                <div class="logo">
+                    <a href="/">
+                        <img alt="I'm not so good with Photoshop..." height="95" src="/images/logo.png" width="108" />
+                    </a>
+                </div>
+                <nav>
+                    <ul class="menu">
+                        <li> <a href="/Home" class="home">Home</a> 
+                        </li>
+                        <li> <a href="/Whatitsabout.html" class="what-its-about">What it's about</a> 
+                        </li>
+                        <li> <a href="/Coding" class="coding">Coding</a> 
+                        </li>
+                        <li> <a href="/Toolbox" class="toolbox">Toolbox</a> 
+                        </li>
+                        <li> <a href="/Money" class="money">Money</a> 
+                        </li>
+                        <li> <a href="/About.html" class="about-me">About Me</a> 
+                        </li>
+                        <li> <a href="/Contact.html" class="contact-us">Contact</a> 
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </header>
+        <div id="main">
+            <div class="container">
+                <div id="block_ttt" class="block">
+                    <div class="block_inside">
+<!--                         <div id="weathercont">
+ -->                            <div id="mapcanvas" style="width: 600px; height: 600px;"></div>
+                            <div id="geoinfo">
+                                <div id ="location">
+                                    <p id = "country"></p>
+                                    <p id = "coords"></p>
+                                    <p id = "city"></p>
+                                </div>
+                                <div id = "weather">
+                                    <p id = "temp"></p>
+                                    <p id = "desc"></p>
+                                </div>
+                            </div>
+<!--                         </div>
+ -->                    </div>
+                </div>
+            </div>
+        </div>
+        <footer>
+            <div class="container">
+            </div>
+        </footer>
+        <script type = "text/javascript" src = "https://maps.googleapis.com/maps/api/js?key=AIzaSyAXDWNszcN8r4vEKOeTQcDv27m7PtqoHQM&sensor=false" > </script>
+    <script type="text/javascript">
+    var map,
+        marker = '';
+        $country = document.getElementById('country'),
+        $coords = document.getElementById('coords'),
+        $city = document.getElementById('city'),
+        $temp = document.getElementById('temp'),
+        $desc = document.getElementById('desc'),
+        $geoinfo = document.getElementById('geoinfo');
+      
+      function initialize() {
+        var soc2 = io.connect(document.location.href);
+        var myLatlng = new google.maps.LatLng(47.2,-0.7),
+            mapOptions = {
+                streetViewControl: false,
+                center: myLatlng,
+                zoom: 2,
+                mapTypeId: google.maps.MapTypeId.HYBRID
+            };
+        map = new google.maps.Map(document.getElementById("mapcanvas"),mapOptions);
+        google.maps.event.addListener(map, 'click', function(event) {
+            placeMarker(event.latLng);
+            var myLatLng = event.latLng,
+                lat = myLatLng.lat(),
+                lng = myLatLng.lng(),
+                url = 'http://api.openweathermap.org/data/2.5/weather?lat='+lat+'&lon='+lng+'&APPID=231293ac6f016962bb118ca7d30bfd4b&callback=?'
+          $.getJSON(url, function(data) {
+            console.log(data);
+            var wLatLng = data.coord.lat+','+data.coord.lon,
+                country = data.sys.country,
+                city = data.name;
+                temp = parseFloat(data.main.temp)-273.15;
+                temp = temp.toFixed(2);
+                desc = data.weather[0].description;
+            $country.innerHTML = 'Country : '+ country;
+            $coords.innerHTML = 'Coordinates : '+ wLatLng;
+            $city.innerHTML = 'City : '+ city;
+            $temp.innerHTML = 'Temperature : '+ temp +'°C';
+            $desc.innerHTML = 'How it looks like : '+desc+'</br><img alt='+desc+' src=http://openweathermap.org/img/w/'+data.weather[0].icon+' />';
+
+        });
+
+
+
+        });
+      }
+
+
+      function placeMarker(location) {
+            delMark();
+            marker = new google.maps.Marker({
+            position: location,
+            map: map
+        });
+        map.setCenter(location);
+      }
+      // Deletes marker
+      function delMark() {
+        if (marker) {
+          marker.setMap(null);
+        }
+
+      }
+      google.maps.event.addDomListener(window, 'load', initialize);
+    </script>
+    </body>
+</html>

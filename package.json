@@ -1,0 +1,16 @@
+{
+     "name": "TTT",
+     "description": "example application with socket.io",
+     "version": "0.0.1-31",
+     "dependencies": {
+          "socket.io": "0.9.13",
+          "node-static": "0.6.x"
+     },
+     "subdomain": "shirase-TTT",
+     "scripts": {
+          "start": "ttt.js"
+     },
+     "engines": {
+          "node": "0.8.x"
+     }
+}
