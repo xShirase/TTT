@@ -10,6 +10,7 @@
     </head>
     
     <body>
+      <!-- Header -->
         <header>
             <div class="container">
                 <div class="logo">
@@ -17,6 +18,7 @@
                         <img alt="I'm not so good with Photoshop..." height="95" src="/images/logo.png" width="108" />
                     </a>
                 </div>
+                <!-- Menu -->
                 <nav>
                     <ul class="menu">
                         <li> <a href="/Home" class="home">Home</a> 
@@ -37,17 +39,20 @@
                 </nav>
             </div>
         </header>
+        <!-- Main page body -->
         <div id="main">
             <div class="container">
                 <div id="block_ttt" class="block">
                     <div class="block_inside">
+                      <!-- App block -->
                         <div id="tttcont">
-                            <canvas id="board" width="600" height="600" onclick="move()"></canvas>
-                            <div id='formttt' class="visible">
+                          <!-- Game canvas and Overlay -->
+                            <canvas id="board" width="600" height="600"></canvas>
+                            <div id='formttt'>
                                 <h1>Play</h1>
-                                <div class="fieldContainer">
+                                <div class="fieldContainer" id="loginttt">
                                     <div class="formRow">
-                                        <div class="label">
+                                        <div class="label" >
                                             <label for="name">Name:</label>
                                         </div>
                                         <div class="field">
@@ -56,24 +61,32 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
-                        <div id="chatbox">
-                            <div id= "queue">
 
+
+                        </div>
+                        <!-- Chat block -->
+                        <div id="chatbox">
+                            <div id= "userttt">
+                              <div id = "userx"></div>
+                              <div id = "usero"></div>
                             </div>
                             <div id = "chat">
+                                <div id="chatmessages">
+                                </div>
                                 <div class="field">
-                                   <input type="text" id="chat" />
+                                   <input type="text" id="chatinput" />
                                 </div>
                             </div>
                             <div id = "ingame">
-
                             </div>
                         </div>
+                        <!-- end of Chat block -->
                     </div>
+                    <!-- end of App block -->
                 </div>
             </div>
         </div>
+        <!-- footer -->
         <footer>
             <div class="container">
                 <div>
@@ -85,130 +98,221 @@
                 </div>
             </div>
         </footer>
+        <!-- JS -->
         <script type="text/javascript">
 /*jslint browser:true */
 /* node JSLint: true */
 /*global alert: false, $: false*/
-var started = 0,
-    player = 0,
-    color = '',
-    soc = io.connect();
-//Sending Chat message
-$('#chat').keypress(function(event) {
-    "use strict";
-        if (event.which === 13) { //key enter pressed
-            event.preventDefault();           
-            soc.send('chat,' + $('#chat').val()); //send player message to socket
-        }
-    });
+
+(function($) {
+  "use strict";
+  var soc = io.connect(),
+    name = '',
+    messages = []; //TODO : put in chat obj
+  ////////SOCKET EVENTS////////
+
+  // General events //
+  soc.on('connect', function() {
+    console.log('connected');
+  });
+  soc.on('disconnect', function() {
+    console.log('disconnected');
+  });
+  soc.on('error', function(err) {
+    if (err === 'handshake error') {
+      console.log('handshake error', err);
+    } else {
+      console.log('io error', err);
+    }
+  });
+
+  // Game specific events //
+  soc.on('addPlayer', function(player) {
+    // console.log('received addPlayer' + player);
+    game.addPlayer(player);
+  });
+  soc.on('startGame', function(c) {
+    game.startGame(c);
+  });
+  soc.on('move', function(mv) {
+    game.move(mv);
+  });
+  soc.on('endGame', function(id, msg) {
+    game.endGame(id, msg);
+  });
+
+  // Chat specific events // 
+  soc.on('chatmsg', function(message) {
+    // console.log(message);
+    chat.showNew();
+  });
+  soc.on('newUser', function(name) {
+    chat.showNew();
+  });
+  ////////DOCUMENT EVENTS////////
+
+  $('#name').keypress(function(event) {
+    if (event.which === 13) { //key enter pressed
+      event.preventDefault();
+      name = $('#name').val();
+      soc.emit('addUser', name);
+      document.getElementById('loginttt').className = "disappear";
+    }
+  });
+
+  $('#chatinput').keypress(function(event) {
+    if (event.which === 13) { //key enter pressed
+      event.preventDefault();
+      var msg = '<b>' + name + ': </b>' + $('#chatinput').val();
+      if (name){
+      chat.showNew(msg);
+      soc.emit('chatmsg', msg);
+    }else {alert('Please enter your name first!')}
+    }
+  });
+
+  document.getElementById('board').addEventListener('click', function() {
+    game.makeMove();
+  }, false);
+
+  var chat = (function() {
 
 
-//Game related functions
+    return {
+      receiveNew: function(msg) {
+        messages.push(msg);
+        var contents = "<ul>";
+          for (var i = 0, j = messages.length; i < j; i += 1) {
+            contents += "<li>" + messages[i] + "</li>";
+          }
+        contents += "</ul>";
+    document.getElementById('chatmessages').innerHTML = contents;
+      }
+    };
+  }());
 
-function findPos(obj) {
-    "use strict";
-    var curleft = 0,
-        curtop = 0;
-    if (obj.offsetParent) {
-        while (obj.offsetParent) {
+
+  ////////GAME ////////
+  var game = (function() {
+    //Private vars//
+    var started = false,
+      canvas = document.getElementById('board'),
+      divx = document.getElementById('userx'),
+      divo = document.getElementById('usero'),
+      ctx = canvas.getContext('2d'),
+      p = [],
+      color = '',
+      score = 0,
+
+      //private functions//
+      drawGrid = function() {
+        canvas.width = canvas.width;
+        ctx.moveTo(200, 0);
+        ctx.lineTo(200, 600);
+        ctx.moveTo(400, 0);
+        ctx.lineTo(400, 600);
+        ctx.moveTo(0, 200);
+        ctx.lineTo(600, 200);
+        ctx.moveTo(0, 400);
+        ctx.lineTo(600, 400);
+        ctx.stroke();
+      },
+      findPos = function(obj) {
+        var offsetLeft = 0,
+          offsetTop = 0;
+        if (obj.offsetParent) {
+          while (obj.offsetParent) {
             obj = obj.offsetParent;
-            curleft += obj.offsetLeft;
-            curtop += obj.offsetTop;
+            offsetLeft += obj.offsetLeft;
+            offsetTop += obj.offsetTop;
+          }
+          return {
+            x: offsetLeft,
+            y: offsetTop
+          };
         }
-        return {
-            x: curleft,
-            y: curtop
-        };
-    }
-    return undefined;
-}
+        return undefined;
+      },
+      drawX = function(x, y) {
+        ctx.beginPath();
+        ctx.lineWidth = "5";
+        ctx.strokeStyle = "green";
+        ctx.moveTo(x - 20, y - 20);
+        ctx.lineTo(x + 20, y + 20);
+        ctx.moveTo(x - 20, y + 20);
+        ctx.lineTo(x + 20, y - 20);
+        ctx.stroke();
+      },
+      drawO = function(x, y) {
+        ctx.beginPath();
+        ctx.lineWidth = "5";
+        ctx.strokeStyle = "red";
+        ctx.arc(x, y, 30, 0, 2 * Math.PI);
+        ctx.stroke();
+      },
+      setColor = function(c) {
+        color = c;
+      };
 
-function move(event) {
-    "use strict";
-    if (started === 1) {
-        //alert(color + 'is you');
-        event = event || window.event;
-        var canvas = document.getElementById('board'),
-            pos = findPos(canvas),
-            //alert(pos.x+' '+pos.y);
-            x = event.pageX - pos.x,
-            y = event.pageY - pos.y;
-        soc.send('move,' + color + ',' + x + ',' + y);
-    }
-}
-
-function drawGrid(ctx) {
-    "use strict";
-    ctx.moveTo(200, 0);
-    ctx.lineTo(200, 600);
-    ctx.moveTo(400, 0);
-    ctx.lineTo(400, 600);
-    ctx.moveTo(0, 200);
-    ctx.lineTo(600, 200);
-    ctx.moveTo(0, 400);
-    ctx.lineTo(600, 400);
-    ctx.stroke();
-}
-
-//main
-
-$(function() {
-    "use strict";
-    var canvas = document.getElementById('board'),
-        ctx = canvas.getContext('2d');
-    drawGrid(ctx); 
-
-
-    //when user enters his name (could benefit with some err control, is there a possibility of script injection?)
-    $('#name').keypress(function(event) {
-        if (event.which === 13) { //key enter pressed
-            event.preventDefault();
-            
-            soc.send('player,' + $('#name').val()); //send player message to socket
-            document.getElementById('formttt').className = "hidden"; //hide the form with a neat fadeout ^^
+    ////////public members////////
+    return {
+      addPlayer: function(player) {
+        p.push(player);
+      },
+      startGame: function(c) {
+        started = true;
+        divx.innerHTML = p[1].name;
+        divo.innerHTML = p[0].name;
+        setColor(c);
+        document.getElementById('formttt').className = "hidden";
+        drawGrid();
+      },
+      makeMove: function() {
+        var pos = findPos(canvas),
+          //alert(pos.x+' '+pos.y);
+          x = event.pageX - pos.x,
+          y = event.pageY - pos.y;
+        if (started) {
+          var move = {
+            color: color,
+            x: x,
+            y: y
+          };
+          // console.log(move);
+          soc.emit('tryMove', move);
         }
-    });
+      },
+      move: function(mv) {
+        // console.log('almost there');
+        if (mv.color === 'x') {
+          drawX(mv.x, mv.y);
+        } else {
+          drawO(mv.x, mv.y);
+        }
+      },
+      endGame: function(id) {
 
-    soc.on('connect', function() {
-        //reading messages (parser works the exact same way than the server)
-        soc.on('message', function(message) {
-            var msg = message.split(","),
-                recx = parseInt(msg[2], null),
-                recy = parseInt(msg[3], null);
+        switch (id) {
+          case 0:
+            alert('You lose. Glorious.');
+            break;
+          case 1:
+            alert('You win. Be proud!');
+            break;
+          case 2:
+            alert('It\'s a tie. Try again?');
+            break;
+          default:
+            break;
+        }
+        drawGrid();
+      }
+    };
 
-            if (msg[0] === "player") {
-                alert('you are player' + msg[1] + ' : ' + 'Your color is :' + msg[3]);
-                color = msg[3];
-            } else if (msg[0] === "start") {
-                started = 1;
-            } else if (msg[0] === "move") {
-                ctx.moveTo(recx, recy);
-                if (msg[1] === "x") {
-                    //alert(recx+','+recy);
-                    ctx.moveTo(recx - 20, recy - 20);
-                    ctx.lineTo(recx + 20, recy + 20);
-                    ctx.moveTo(recx - 20, recy + 20);
-                    ctx.lineTo(recx + 20, recy - 20);
-                } else {
-                    ctx.arc(recx, recy, 30, 0, 2 * Math.PI);
-                }
-                ctx.stroke();
-            } else if (msg[0] === "error") {
-                alert(msg[1]);
-            } else if (msg[0] === "win") { //if the game is finished (either win, tie or forfeit), reset the board.
-                canvas.width = canvas.width;
-                //ctx.clearRect(0,0,canvas.width, canvas.height); NOT WORKING WHY? used width=width as workaround
-                drawGrid(ctx);
-                alert(msg[1]);
-            } else if (msg[0] === "alert") {
-                alert(msg[1]);
-            } else if (msg[0] === "chat") {
-                msg = '';
-            }
-        });
-    });
+  }());
+  ////////CHAT ////////  
 
-});
+}(jQuery));
         </script>
     </body>
 

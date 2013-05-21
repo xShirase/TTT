@@ -1,17 +1,75 @@
 var fs = require('fs'),
-    http = require('http'),
-    mv = 0,
-    p = [],
-    lastmove = '',
-    board = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+    http = require('http');
 
-//Game Functions
 
-function testwin(board) {
+// This commented bit is enough to get a working app, if used in conjunction with a webserver to serve the static files. Used the workaround below to get a working demo on node.js only. 
+// var serv = http.createServer(function(req, res) {
+//                 res.writeHead(200, { 'Content-type': 'text/html'});
+//                 res.end(fs.readFileSync(__dirname + '/public/ttt.html'));}).listen(8080, function() { console.log('running 8080');});
+
+
+//use of a fs and node-static to serve the static files to client
+
+function handler(request, response) {
     "use strict";
-    var i = 0,
+    fileServer.serve(request, response); // this will return the correct file
+}
+
+var app = http.createServer(handler),
+    iosocks = require('socket.io').listen(app),
+    staticserv = require('node-static'), // for serving files
+
+    // This will make all the files in the current folder
+    // accessible from the web
+    fileServer = new staticserv.Server('./');
+app.listen(8080);
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+///Game definition////
+var game = (function() {
+    var mv = 0,
+        p = [],
+        queue = [],
+        lastmove = '',
+        board = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+
+    ////////User handling////////
+    var addtoQueue = function(player) {
+        queue.push(player);
+        console.log('added to queue : ' + player.name);
+    },
+    addPlayer = function(player) {
+        player.score = 0;
+        p.push(player);
+        console.log('player added: ' + player.name);
+        return p;
+    },
+    getPlayers = function() {
+        return p.length;
+    },
+    updateQueue = function() {
+        if (queue.length) {
+            addPlayer(queue[0]);
+            queue.splice(0, 1);
+            console.log('queue updated ' + queue.length);
+        }
+    },
+    getRow = function(x) {
+        var row = Number((x / 200).toString().charAt(0), null);
+        return row;
+    },
+    isLegal = function(move) {
+        if (lastmove === '' || lastmove !== move.color && board[move.box] === 0) {
+            return true;
+        } else {
+            return false;
+        }
+    },
+    testWin = function() {
+
         //winning combinations 
-        win = [
+        var win = [
             [0, 1, 2],
             [3, 4, 5],
             [6, 7, 8],
@@ -22,201 +80,151 @@ function testwin(board) {
             [2, 4, 6]
         ];
 
-    //check board for a winner 
-    for (i; i < 8; i += 1) {
-        if (board[win[i][0]] === board[win[i][1]] && board[win[i][0]] === board[win[i][2]] && board[win[i][0]] !== 0) {
-            return 1;
+        //check board for a winner 
+        for (var i=0; i < 8; i += 1) {
+            if (board[win[i][0]] === board[win[i][1]] && board[win[i][0]] === board[win[i][2]] && board[win[i][0]] !== 0) {
+                return true;
+            }
+        }
+        return false;
+    },
+    resetBoard = function() {
+        board = [0, 0, 0, 0, 0, 0, 0, 0, 0];
+        mv = 0;
+        lastmove = '';
+    };
+
+    ////////public members////////
+    return {
+        sortPlayers: function(user) {
+            if (getPlayers() < 2) {
+                var players = addPlayer(user);
+                console.log({
+                    name: players[0].name,
+                    color: players[0].color
+                });
+
+                if (getPlayers() === 2) {
+                    players[1].id.emit('addPlayer', {
+                        name: players[1].name,
+                        color: 'x'
+                    });
+                    players[1].id.emit('addPlayer', {
+                        name: players[0].name,
+                        color: 'o'
+                    });
+                    players[0].id.emit('addPlayer', {
+                        name: players[1].name,
+                        color: 'x'
+                    });
+                    players[0].id.emit('addPlayer', {
+                        name: players[0].name,
+                        color: 'o'
+                    });
+                    players[0].id.emit('startGame', 'o');
+                    players[1].id.emit('startGame', 'x');
+                }
+            } else {
+                addtoQueue(user);
+            }
+        },
+        splicePlayer: function(user) {
+            for (var i = 0, j = getPlayers(); i < j; i += 1) {
+                if (user.name === p[i].name) {
+                    p.splice(i, 1);
+                    updateQueue();
+                    return;
+                }
+            }
+        },
+        tryMove: function(m) {
+            var row = getRow(m.y),
+                col = getRow(m.x),
+                boxmove = 3 * row + col,
+                move = {
+                    color: m.color,
+                    box: boxmove
+                };
+            if (isLegal(move)) {
+                board[boxmove] = move.color;
+                move.y = 200 * row + 100;
+                move.x = 200 * col + 100;
+                p[1].id.emit('move', move);
+                p[0].id.emit('move', move);
+
+                //update lastmove and movecounter
+                lastmove = move.color;
+                mv += 1;
+                if (testWin()) {
+
+                    if (lastmove === 'o') {
+                        p[0].id.emit('endGame', 1);
+                        p[1].id.emit('endGame', 0);
+                    } else {
+                        p[1].id.emit('endGame', 1);
+                        p[0].id.emit('endGame', 0);
+                    }
+                    resetBoard();
+                    //We got a winner, reset board!
+
+                } else if (mv === 9) {
+                    p[1].id.emit('endGame', 2);
+                    p[0].id.emit('endGame', 2);
+                    resetBoard();
+                }
+            } else {
+                p[1].id.emit('error', move);
+                p[0].id.emit('error', move);
+            }
+
+        }
+
+    };
+
+}());
+
+/////Handling global users
+var users = [];
+
+var addUser = function(name, id) {
+    var user = {
+        name: name,
+        id: id
+    };
+    users.push(user);
+    return user;
+};
+var spliceUser = function(user) {
+    for (var i = 0; i < users.length; i += 1) {
+        if (user.name === users[i].name) {
+            users.splice(i, 1);
+            return;
         }
     }
-    return -1;
-}
-
-function getRow(x) {
-    "use strict";
-    var row = parseInt((x / 200).toString().charAt(0), null);
-    return row;
-}
+};
 
 
-// This commented bit is enough to get a working app, if used in conjunction with a webserver to serve the static files (best practice). Used the workaround below to get a working demo on node.js only. 
-// var serv = http.createServer(function(req, res) {
-//                 res.writeHead(200, { 'Content-type': 'text/html'});
-//                 res.end(fs.readFileSync(__dirname + '/public/ttt.html'));}).listen(8080, function() { console.log('running 8080');});
-
-
-// var iosoc = require('socket.io'); 
-// var iosocks = iosoc.listen(connect);
-
-
-//use of a fs and node-static to serve the static files to client
-
-function handler(request, response) {
-    "use strict";
-   /* response.writeHead(200, {
-                         'Access-Control-Allow-Origin' : '*',
-                         'Access-Control-Allow-Headers': 'x-requested-with'});*/
-    fileServer.serve(request, response); // this will return the correct file
-}
-
-var app = http.createServer(handler),
-    iosocks = require('socket.io').listen(app),
-    staticserv = require('node-static'); // for serving files
-
-// This will make all the files in the current folder
-// accessible from the web
-var fileServer = new staticserv.Server('./');
-app.listen(8080);
-
-
-//when a client connects :
+/////////////SOCKET EVENTS//////////////
 iosocks.on('connection', function(soc) {
     "use strict";
-    //on disconnect
+    var user = {};
+
     soc.on('disconnect', function() {
-        var i = 0,
-            c = 0,
-            len = 0;
-        for (i, len = p.length; i < len; i += 1) {
-            c = p[i];
-            if (c.id === soc) {
-                console.log('player deleted');
-                p.splice(i, 1);
-                if(p.length){p[0].id.emit('message', 'win,Opponent forfeited. Congratulations!');}
-                board = [0, 0, 0, 0, 0, 0, 0, 0, 0];
-                mv = 0;
-                lastmove = '';
-                break;
-            }
-        }
+        spliceUser(user);
+        game.splicePlayer(user);
     });
 
-    //listen for 'message' signal
-    soc.on('message', function(message) {
-        console.log('Message Received: ', message);
-
-        //all the part below is game specific. The message is parsed to give the required infos (assign player colors, moves, etc)
-        var msg = message.split(','),
-            color = '',
-            player = {},
-            i = 0,
-            c = 0,
-            len = 0,
-            xcol = 0,
-            yrow = 0,
-            col = 0,
-            row = 0,
-            boxmove = 0;
-
-        if (msg[0] === 'player') {
-            if (p.length < 2) {
-                //log in new player, record its socket and assign a color (X or O)
-                player.id = soc;
-
-                if (p[0]) {
-                    if (p[0].color === 'x') {
-                        player.color = 'o';
-                    } else if (p[0].color === 'o') {
-                        player.color = 'x';
-                    }
-                } else {
-                    player.color = 'x';
-                }
-                console.log('NEW PLAYER');
-
-                p.push(player);
-                soc.emit('message', 'player,' + p.length + ',' + player.id + ',' + player.color);
-
-                if (p.length === 2) {
-                    //2 players have logged in, sending a 'start' message to clients and clearing the board
-                    console.log('2pl');
-                    p[0].id.emit('message', 'start,' + p[0].color);
-                    p[1].id.emit('message', 'start,' + p[1].color);
-                    board = [0, 0, 0, 0, 0, 0, 0, 0, 0];
-                }
-
-            } else {
-                soc.emit('error', 'board full, try later');
-            }
-
-        } else if (p.length === 2) {
-            // client has made a move
-            if (msg[0] === 'move') {
-
-                if (mv < 9) { // a game can't have more than 9 consecutive moves. 
-                    //retrieve color for the player who emitted the move
-                    for (i, len = p.length; i < len; i += 1) {
-                        c = p[i];
-                        if (c.id === soc) {
-                            color = c.color;
-                            break;
-                        }
-                    }
-
-                    //Check if move legal
-                    if (lastmove === '' || lastmove !== color) { //if it's the right client's turn or first move of the game
-
-                        //reading clicked coordinates and converting them to a box of coordinate (row,col) example, top left box is (0,0), then to number 0..8 (top left = 0, bottom right = 8)
-
-                        row = getRow(msg[3]);
-                        col = getRow(msg[2]);
-                        boxmove = 3 * row + col;
-
-                        if (board[boxmove] === 0) { //if box is empty
-
-                            if (color === 'x') {
-                                board[boxmove] = 1;
-                            } else {
-                                board[boxmove] = 2;
-                            }
-
-                            //send coordinates of center of box to the player, so client knows what and where to draw
-                            //syntax of move :   move,color,x,y
-
-                            yrow = 200 * row + 100;
-                            xcol = 200 * col + 100;
-                            p[1].id.emit('message', 'move,' + color + ',' + xcol + ',' + yrow);
-                            p[0].id.emit('message', 'move,' + color + ',' + xcol + ',' + yrow);
-
-                            //update lastmove and movecounter
-                            lastmove = color;
-                            mv += 1;
-
-                            //test board for a winner
-                            if (testwin(board) === 1) {
-                                if (i === 0) {
-                                    p[0].id.emit('message', 'win,you win !');
-                                    p[1].id.emit('message', 'win,you suck... get lost !');
-                                } else {
-                                    p[1].id.emit('message', 'win,you win !');
-                                    p[0].id.emit('message', 'win,you suck... get lost !');
-                                }
-
-                                //We got a winner, reset board!
-                                board = [0, 0, 0, 0, 0, 0, 0, 0, 0];
-                                mv = 0;
-                                lastmove = '';
-                            } else if (mv === 9) {
-                                p[1].id.emit('message', 'win,It\'s a tie!');
-                                p[0].id.emit('message', 'win,It\'s a tie!');
-                                board = [0, 0, 0, 0, 0, 0, 0, 0, 0];
-                                mv = 0;
-                                lastmove = '';
-                            }
-
-                        } else {
-                            p[i].id.emit('message', 'error,box full... Dumbass.');
-                        }
-                    } else {
-                        p[i].id.emit('message', 'error,Not your turn, dumbass.');
-                    }
-
-                }
-            }
-        } else if (msg[0] === 'move') {
-            p[0].id.emit('message', 'alert,Waiting for an opponent');
-        } else {
-            soc.broadcast.emit('message', msg);
-        } //stays here for further functionalities
-
+    soc.on('addUser', function(name) {
+        user = addUser(name, soc);
+        soc.broadcast.emit('newUser', '<b>' + user.name + '</b> has connected </br>');
+        game.sortPlayers(user);
     });
+    soc.on('tryMove', function(c, x, y) {
+        game.tryMove(c, x, y);
+    });
+    soc.on('chatmsg', function(msg) {
+        console.log(msg);
+        soc.broadcast.emit('chatmsg', msg);
+    });
+
 });
