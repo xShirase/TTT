@@ -1,7 +1,7 @@
 {
      "name": "TTT",
      "description": "Tic-Tac-Toe application with Node and Socket.io",
-     "version": "0.9.0-1",
+     "version": "0.9.0-2",
      "dependencies": {
           "socket.io": "0.9.13",
           "node-static": "0.6.x"
